@@ -24,7 +24,6 @@ Single-file Python script with no external dependencies. Modules:
 | `clean_cache` | Delete caches     | `~/Library/Caches`, `/Library/Caches`            |
 | `flush_dns`   | Flush DNS cache   | `dscacheutil`, `mDNSResponder`                   |
 | `purge_mem`   | Purge inactive RAM| `sudo purge`                                     |
-| `run_scripts` | Maintenance tasks | `sudo periodic daily weekly monthly`             |
 | `find_large`  | Find large files  | Home directory, >500MB default                   |
 | `clean_xcode` | Xcode cleanup     | `~/Library/Developer/Xcode/DerivedData`          |
 

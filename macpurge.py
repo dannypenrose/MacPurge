@@ -74,12 +74,15 @@ def delete_contents(path: Path, use_sudo: bool = False) -> int:
 
             try:
                 if use_sudo:
-                    subprocess.run(
+                    result = subprocess.run(
                         ["sudo", "rm", "-rf", str(child)],
-                        check=True,
                         capture_output=True,
                     )
-                    freed += size
+                    if result.returncode == 0:
+                        freed += size
+                    else:
+                        msg = result.stderr.decode().strip() or f"exit {result.returncode}"
+                        print(f"  {DIM}skip: {child.name} ({msg}){RESET}")
                 else:
                     if not child.is_symlink() and child.is_dir():
                         shutil.rmtree(child, ignore_errors=True)
@@ -216,18 +219,6 @@ def purge_mem() -> None:
         print(f"  {RED}Failed: {exc}{RESET}")
 
 
-def run_scripts() -> None:
-    """Run macOS periodic maintenance scripts."""
-    print(f"\n{BOLD}Run Periodic Maintenance Scripts{RESET}")
-    try:
-        subprocess.run(
-            ["sudo", "periodic", "daily", "weekly", "monthly"],
-            check=True,
-        )
-        print(f"  {GREEN}Periodic scripts completed.{RESET}")
-    except subprocess.CalledProcessError as exc:
-        print(f"  {RED}Failed: {exc}{RESET}")
-
 
 def find_large(min_mb: int = 500) -> None:
     """List the top 10 largest files in the home directory (>min_mb MB)."""
@@ -334,9 +325,8 @@ MENU = f"""
   {BOLD}2{RESET}  Clean Caches        {DIM}~/Library/Caches, /Library/Caches{RESET}
   {BOLD}3{RESET}  Flush DNS Cache
   {BOLD}4{RESET}  Purge Inactive RAM
-  {BOLD}5{RESET}  Run Maintenance Scripts
-  {BOLD}6{RESET}  Find Large Files     {DIM}(>500 MB in ~){RESET}
-  {BOLD}7{RESET}  Clean Xcode Data     {DIM}~/…/DerivedData{RESET}
+  {BOLD}5{RESET}  Find Large Files     {DIM}(>500 MB in ~){RESET}
+  {BOLD}6{RESET}  Clean Xcode Data     {DIM}~/…/DerivedData{RESET}
   {BOLD}A{RESET}  Run All Cleanups
   {BOLD}Q{RESET}  Quit
 """
@@ -366,10 +356,8 @@ def interactive_menu() -> None:
         elif choice == "4":
             purge_mem()
         elif choice == "5":
-            run_scripts()
-        elif choice == "6":
             find_large()
-        elif choice == "7":
+        elif choice == "6":
             size = clean_xcode(dry_run=True)
             if size and confirm("\nProceed with deletion?"):
                 total_freed += clean_xcode(dry_run=False)
@@ -387,7 +375,6 @@ def interactive_menu() -> None:
                 total_freed += clean_xcode(dry_run=False)
                 flush_dns()
                 purge_mem()
-                run_scripts()
         elif choice == "q":
             print("Bye!")
             break
@@ -421,7 +408,6 @@ examples:
     parser.add_argument("--clean-cache", action="store_true", help="Clean cache files")
     parser.add_argument("--flush-dns", action="store_true", help="Flush DNS cache")
     parser.add_argument("--purge-mem", action="store_true", help="Purge inactive RAM")
-    parser.add_argument("--run-scripts", action="store_true", help="Run periodic maintenance scripts")
     parser.add_argument("--find-large", nargs="?", const=500, type=int, metavar="MB", help="Find large files (default >500 MB)")
     parser.add_argument("--clean-xcode", action="store_true", help="Clean Xcode DerivedData")
     parser.add_argument("--all", action="store_true", help="Run all cleanup modules")
@@ -442,7 +428,6 @@ def run_cli(args: argparse.Namespace) -> None:
         "clean_cache": args.clean_cache or args.all,
         "flush_dns": args.flush_dns or args.all,
         "purge_mem": args.purge_mem or args.all,
-        "run_scripts": args.run_scripts or args.all,
         "find_large": args.find_large is not None or args.all,
         "clean_xcode": args.clean_xcode or args.all,
     }
@@ -472,12 +457,6 @@ def run_cli(args: argparse.Namespace) -> None:
     elif targets["purge_mem"]:
         print(f"\n{BOLD}[DRY RUN] Purge Inactive Memory{RESET}")
         print(f"  Would run: sudo purge")
-
-    if targets["run_scripts"] and not dry_run:
-        run_scripts()
-    elif targets["run_scripts"]:
-        print(f"\n{BOLD}[DRY RUN] Run Periodic Maintenance Scripts{RESET}")
-        print(f"  Would run: sudo periodic daily weekly monthly")
 
     if targets["find_large"]:
         min_mb = args.find_large if args.find_large is not None else 500
@@ -509,7 +488,7 @@ def main() -> None:
     # If no flags given, launch interactive menu
     has_action = any([
         args.clean_logs, args.clean_cache, args.flush_dns,
-        args.purge_mem, args.run_scripts, args.find_large is not None,
+        args.purge_mem, args.find_large is not None,
         args.clean_xcode, args.all,
     ])
 
