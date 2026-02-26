@@ -235,15 +235,28 @@ def find_large(min_mb: int = 500) -> None:
     threshold = min_mb * 1024 * 1024
     large_files: list[tuple[int, Path]] = []
 
-    skip_dirs = {".Trash", "Library", ".cache", "node_modules", ".git"}
+    # Top-level dirs to skip entirely
+    skip_top = {".Trash", "Library", ".cache", "node_modules", ".git"}
+    # Directory names to skip at any depth during traversal
+    skip_any = {"node_modules", ".git", ".cache", "__pycache__", ".venv",
+                "venv", ".tox", ".mypy_cache", ".pytest_cache", "Pods",
+                ".bundle", "vendor", ".gradle", "build", "DerivedData"}
 
+    scanned = 0
     for entry in HOME.iterdir():
-        if entry.name in skip_dirs or entry.is_symlink():
+        if entry.name in skip_top or entry.is_symlink():
             continue
         if entry.is_dir():
+            print(f"  {DIM}Scanning ~/{entry.name} ...{RESET}", end="\r", flush=True)
             try:
                 for f in entry.rglob("*"):
+                    if f.is_dir() and f.name in skip_any:
+                        continue
                     if not f.is_symlink() and f.is_file():
+                        scanned += 1
+                        if scanned % 50_000 == 0:
+                            print(f"  {DIM}Scanned {scanned:,} files ...{RESET}",
+                                  end="\r", flush=True)
                         try:
                             sz = os.lstat(f).st_size
                             if sz >= threshold:
@@ -253,6 +266,7 @@ def find_large(min_mb: int = 500) -> None:
             except (PermissionError, OSError):
                 pass
         elif not entry.is_symlink() and entry.is_file():
+            scanned += 1
             try:
                 sz = os.lstat(entry).st_size
                 if sz >= threshold:
@@ -260,10 +274,13 @@ def find_large(min_mb: int = 500) -> None:
             except (PermissionError, OSError):
                 pass
 
+    # Clear progress line
+    print(" " * 60, end="\r", flush=True)
+
     large_files.sort(key=lambda x: x[0], reverse=True)
 
     if not large_files:
-        print(f"  {DIM}No files larger than {min_mb} MB found.{RESET}")
+        print(f"  {DIM}No files larger than {min_mb} MB found ({scanned:,} files scanned).{RESET}")
         return
 
     for size, path in large_files[:10]:
@@ -271,6 +288,7 @@ def find_large(min_mb: int = 500) -> None:
         print(f"  {GREEN}{fmt_size(size):>10}{RESET}  ~/{rel}")
     total = sum(s for s, _ in large_files[:10])
     print(f"\n  Top {min(10, len(large_files))} total: {CYAN}{fmt_size(total)}{RESET}")
+    print(f"  {DIM}({scanned:,} files scanned){RESET}")
 
 
 def clean_xcode(dry_run: bool = True) -> int:
